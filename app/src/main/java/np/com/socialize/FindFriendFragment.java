@@ -1,6 +1,8 @@
 package np.com.socialize;
 
+import android.content.Intent;
 import android.os.Bundle;
+import android.widget.Toast;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -62,9 +64,14 @@ public class FindFriendFragment extends Fragment  implements FindFriendsAdapter.
 
 
 
+        userDataViewModel.fetchAllUser();
+
         userDataViewModel.getAllUser().observe(getViewLifecycleOwner(), new Observer<List<User>>() {
             @Override
             public void onChanged(List<User> users) {
+                if (users == null) {
+                    return;
+                }
 
                 Log.d(TAG, "onChanged: OnFirstFragment" +users.size());
 
@@ -128,7 +135,33 @@ public class FindFriendFragment extends Fragment  implements FindFriendsAdapter.
 
 
 
-        userDataViewModel.createNewChat(user);
+        userDataViewModel.openOrCreatePrivateChat(user, new UserDataViewModel.OnPrivateChatReadyListener() {
+            @Override
+            public void onReady(PrivateChat privateChat) {
+                openChat(privateChat);
+            }
 
+            @Override
+            public void onFailure(Exception e) {
+                Toast.makeText(getContext(), "Could not start chat", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void openChat(PrivateChat privateChat) {
+        if (getContext() == null || privateChat.getPrivate_id() == null) {
+            return;
+        }
+        String currentUserId = FirebaseAuth.getInstance().getUid();
+        User partner = privateChat.getPartner(currentUserId);
+        String title = partner != null && partner.getName() != null ? partner.getName() : "Chat";
+        String image = partner != null ? partner.getProfile_photo() : null;
+
+        Intent intent = new Intent(getContext(), ChatActivity.class);
+        intent.putExtra("hobbies_item", title);
+        intent.putExtra("hobbies_image", image);
+        intent.putExtra("server_id", privateChat.getPrivate_id());
+        intent.putExtra("type", "privateChat");
+        startActivity(intent);
     }
 }

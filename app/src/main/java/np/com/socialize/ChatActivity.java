@@ -74,9 +74,6 @@ public class ChatActivity extends AppCompatActivity {
 
     User user;
 
-    Map<String, Object> updateMap = new HashMap();
-
-
     String type ="categories";
 
 
@@ -103,11 +100,13 @@ public class ChatActivity extends AppCompatActivity {
         server_id=getIntent().getStringExtra("server_id");
 
         String hobbies_img=getIntent().getStringExtra("hobbies_image");
-        Picasso
-                .get()
-                .load(hobbies_img)
-                .placeholder(R.drawable.loading)
-                .into(group_image);
+        if (hobbies_img != null && !hobbies_img.isEmpty()) {
+            Picasso
+                    .get()
+                    .load(hobbies_img)
+                    .placeholder(R.drawable.loading)
+                    .into(group_image);
+        }
 
 
 
@@ -123,8 +122,10 @@ public class ChatActivity extends AppCompatActivity {
 
                 Log.d(TAG, "onItemCliked: " +chatMessage.getMessage());
 
-                message.setText(chatMessage.getMessage());
-                send_message.setImageDrawable(ContextCompat.getDrawable(ChatActivity.this,R.drawable.b));
+                if (chatMessage.getMessage() != null) {
+                    message.setText(chatMessage.getMessage());
+                }
+                send_message.setImageDrawable(ContextCompat.getDrawable(ChatActivity.this, R.drawable.ic_done_right));
 
 
 
@@ -166,8 +167,6 @@ public class ChatActivity extends AppCompatActivity {
               @Override
               public void onClick(View v) {
 
-                  Toast.makeText(ChatActivity.this, "Write your logic to send the image as message", Toast.LENGTH_SHORT).show();
-
                   choose();
 
               }
@@ -186,24 +185,27 @@ public class ChatActivity extends AppCompatActivity {
                 .addSnapshotListener(new EventListener<QuerySnapshot>() {
                     @Override
                     public void onEvent(@Nullable QuerySnapshot value, @Nullable FirebaseFirestoreException error) {
+                        if (error != null) {
+                            Log.e(TAG, "load_messages: " + error.getMessage());
+                            return;
+                        }
+                        if (value == null) {
+                            return;
+                        }
 
                         ArrayList<ChatMessage> messageArrayList = new ArrayList<>();
 
-
                         try {
-                            for (DocumentSnapshot documentSnapshot:value.getDocuments()){
-
-                                ChatMessage chatMessage= documentSnapshot.toObject(ChatMessage.class);
-                                messageArrayList.add(chatMessage);
+                            for (DocumentSnapshot documentSnapshot : value.getDocuments()) {
+                                ChatMessage chatMessage = documentSnapshot.toObject(ChatMessage.class);
+                                if (chatMessage != null) {
+                                    messageArrayList.add(chatMessage);
+                                }
                             }
-
-
                             message_recycler(messageArrayList);
                         } catch (Exception e) {
-                            e.printStackTrace();
+                            Log.e(TAG, "load_messages", e);
                         }
-
-
                     }
                 });
 
@@ -229,7 +231,9 @@ public class ChatActivity extends AppCompatActivity {
 
 
         user = Hawk.get("User");
-        auth =FirebaseAuth.getInstance();
+        if (user == null && auth.getCurrentUser() != null) {
+            Toast.makeText(this, "Profile not loaded. Reopen the app.", Toast.LENGTH_SHORT).show();
+        }
 
     }
 
@@ -375,12 +379,10 @@ public class ChatActivity extends AppCompatActivity {
 //                                userDataViewModel.addData(mUser);
                                 Log.d(TAG, "onSuccess: "+uri);
 
-                                addChat(uri.toString(), null );
-                              Toast.makeText(ChatActivity.this, "Uploaded Success" , Toast.LENGTH_SHORT).show();
+                                addChat(uri.toString(), null);
 
                                 progress_bar.setVisibility(View.INVISIBLE);
                                 rlSend.setVisibility(View.VISIBLE);
-                                Toast.makeText(ChatActivity.this, "Please wait a while to load image", Toast.LENGTH_SHORT).show();
 
                             }
                         }).addOnFailureListener(new OnFailureListener() {
@@ -402,10 +404,10 @@ public class ChatActivity extends AppCompatActivity {
                 .addOnFailureListener(new OnFailureListener() {
                     @Override
                     public void onFailure(@NonNull Exception exception) {
-                        // Handle unsuccessful uploads
-                        // ...
-
-                        exception.printStackTrace();
+                        Log.e(TAG, "uploadImage", exception);
+                        Toast.makeText(ChatActivity.this, "Image upload failed", Toast.LENGTH_SHORT).show();
+                        progress_bar.setVisibility(View.INVISIBLE);
+                        rlSend.setVisibility(View.VISIBLE);
                     }
                 });
 
@@ -419,49 +421,40 @@ public class ChatActivity extends AppCompatActivity {
 
     public void addChat(String path, String msg)
     {
+        if (user == null || auth.getUid() == null) {
+            Toast.makeText(this, "Cannot send message. Sign in again.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (server_id == null || server_id.isEmpty()) {
+            Toast.makeText(this, "Chat room is not available.", Toast.LENGTH_SHORT).show();
+            return;
+        }
 
+        Map<String, Object> messageData = new HashMap<>();
+        messageData.put("messageUser", user.getName());
+        messageData.put("profile", user.getProfile_photo());
+        messageData.put("messageTime", new Date().getTime());
+        messageData.put("senderId", auth.getUid());
 
-        updateMap.put("messageUser",user.getName());
-        updateMap.put("profile",user.getProfile_photo());
-        updateMap.put("messageTime", new Date().getTime());
-        updateMap.put("senderId",auth.getUid());
-
-
-        if(msg !=null)
-        {
-
-
-            updateMap.put("message", msg);
-
+        if (msg != null) {
+            messageData.put("message", msg);
             message.setText("");
-
-
+            send_message.setImageDrawable(ContextCompat.getDrawable(this, R.drawable.ic_send_message));
         }
 
-        if(path !=null )
-        {
-
-            updateMap.put("imageMessage",path);
-
+        if (path != null) {
+            messageData.put("imageMessage", path);
         }
-
-
-
 
         db.collection(type)
                 .document(server_id)
                 .collection("messages")
-                .add(updateMap)
-                .addOnSuccessListener(new OnSuccessListener<DocumentReference>() {
-                    @Override
-                    public void onSuccess(DocumentReference documentReference) {
-                        Toast.makeText(ChatActivity.this, "Message sent", Toast.LENGTH_SHORT).show();
-                    }
-                })
+                .add(messageData)
                 .addOnFailureListener(new OnFailureListener() {
                     @Override
                     public void onFailure(@NonNull Exception e) {
-                            e.printStackTrace();
+                        Log.e(TAG, "addChat", e);
+                        Toast.makeText(ChatActivity.this, "Failed to send message", Toast.LENGTH_SHORT).show();
                     }
                 });
 
@@ -469,7 +462,7 @@ public class ChatActivity extends AppCompatActivity {
 
     public void setBackup(String message )
     {
-        db.collection("categories")
+        db.collection(type)
                 .document(server_id)
                 .collection("messages")
                 .document()

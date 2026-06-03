@@ -3,6 +3,8 @@ package np.com.socialize;
 import java.util.ArrayList;
 import java.util.HashMap;
 
+import com.orhanobut.hawk.Hawk;
+
 import np.com.socialize.category.User;
 
 public class PrivateChat {
@@ -73,5 +75,23 @@ public class PrivateChat {
 
     public void setChatMembers(HashMap<String, Boolean> chatMembers) {
         this.chatMembers = chatMembers;
+    }
+
+    public User getPartner(String currentUserId) {
+        if (currentUserId == null) {
+            return receiver != null ? receiver : sender;
+        }
+        if (sender != null && sender.getId() != null && currentUserId.equals(sender.getId())) {
+            return receiver;
+        }
+        if (receiver != null && receiver.getId() != null && currentUserId.equals(receiver.getId())) {
+            return sender;
+        }
+        User myUser = Hawk.get("User");
+        if (myUser != null && sender != null && myUser.getName() != null
+                && myUser.getName().equals(sender.getName())) {
+            return receiver;
+        }
+        return receiver != null ? receiver : sender;
     }
 }

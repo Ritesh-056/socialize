@@ -15,10 +15,13 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.firebase.auth.FirebaseAuth;
+
 import java.util.ArrayList;
 import java.util.List;
 
 import np.com.socialize.category.CurrentChatAdapter;
+import np.com.socialize.category.User;
 import np.com.socialize.category.UserDataViewModel;
 
 public class CurrentChatFragment extends Fragment  implements CurrentChatAdapter.CheckedMessageIconInterface {
@@ -63,6 +66,9 @@ public class CurrentChatFragment extends Fragment  implements CurrentChatAdapter
         userDataViewModel.getAllChat().observe(getViewLifecycleOwner(), new Observer<List<PrivateChat>>() {
             @Override
             public void onChanged(List<PrivateChat> users) {
+                if (users == null) {
+                    return;
+                }
 
                 Log.d(TAG, "onChanged: OnFirstFragment" +users.size());
 
@@ -96,11 +102,16 @@ public class CurrentChatFragment extends Fragment  implements CurrentChatAdapter
         Log.d(TAG, "OnItemClicked: "+privateChat.getPrivate_id());
 
 
-        Intent intent= new Intent(getContext(), ChatActivity.class);
-        intent.putExtra("hobbies_item",privateChat.getSender().getName()+ " ==> " +privateChat.getReceiver().getName());
-        intent.putExtra("hobbies_image", "https://picsum.photos/200/300");
-        intent.putExtra("server_id",privateChat.getPrivate_id());
+        String currentUserId = FirebaseAuth.getInstance().getUid();
+        User partner = privateChat.getPartner(currentUserId);
+        String title = partner != null && partner.getName() != null ? partner.getName() : "Chat";
+        String image = partner != null ? partner.getProfile_photo() : null;
+
+        Intent intent = new Intent(getContext(), ChatActivity.class);
+        intent.putExtra("hobbies_item", title);
+        intent.putExtra("hobbies_image", image);
+        intent.putExtra("server_id", privateChat.getPrivate_id());
         intent.putExtra("type", "privateChat");
-        getContext().startActivity(intent);
+        startActivity(intent);
     }
 }

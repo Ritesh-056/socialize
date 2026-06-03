@@ -147,8 +147,13 @@ public class UserDataViewModel extends ViewModel {
                           for (DocumentSnapshot documentSnapshot:queryDocumentSnapshots.getDocuments()){
 
                               User user= documentSnapshot.toObject(User.class);
-                              user.setId(documentSnapshot.getId());  // setting the users id from document.
-                              users.add(user);
+                              if (user == null) {
+                                  continue;
+                              }
+                              user.setId(documentSnapshot.getId());
+                              if (!documentSnapshot.getId().equals(mAuth.getUid())) {
+                                  users.add(user);
+                              }
                           }
 
 
@@ -172,60 +177,87 @@ public class UserDataViewModel extends ViewModel {
     }
 
 
-    public  void createNewChat(User user){
+    public interface OnPrivateChatReadyListener {
+        void onReady(PrivateChat privateChat);
+        void onFailure(Exception e);
+    }
 
-        if (mAuth.getUid() != null){
-
-                    PrivateChat privateChat = new PrivateChat();
-
-
-
-
-                    ArrayList<String> members= new ArrayList<>();
-
-
-                    members.add(user.getId());
-                    members.add(mAuth.getUid());
-
-
-                    HashMap<String, Boolean> chatMembers = new HashMap<>();
-
-                    chatMembers.put(user.getId(),true);
-                    chatMembers.put(mAuth.getUid(), true);
-
-                    privateChat.setChatMembers(chatMembers);
-
-                    User myUser= Hawk.get("User");
-                    privateChat.setSender(myUser);
-                    privateChat.setReceiver(user);
-                    privateChat.setAccepted(false);
-                    privateChat.setMembers(members);
-                    privateChat.setLastMessage("New Message request");
-
-
-
-                    db.collection("privateChat")
-                       .add(privateChat)
-                        .addOnSuccessListener(new OnSuccessListener<DocumentReference>() {
-                            @Override
-                            public void onSuccess(DocumentReference documentReference) {
-
-                                Log.d(TAG, "onSuccess: "+documentReference.getId());
-                            }
-                        })
-                        .addOnFailureListener(new OnFailureListener() {
-                            @Override
-                            public void onFailure(@NonNull Exception e) {
-
-
-                                Log.d(TAG, "onFailure: "+e.getMessage());
-                                e.printStackTrace();
-                            }
-                        }) ;
-
-
+    public void openOrCreatePrivateChat(User user, OnPrivateChatReadyListener listener) {
+        if (mAuth.getUid() == null || user == null || user.getId() == null) {
+            if (listener != null) {
+                listener.onFailure(new IllegalStateException("Not signed in or invalid user"));
+            }
+            return;
         }
 
+        db.collection("privateChat")
+                .whereArrayContains("members", mAuth.getUid())
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+                    PrivateChat existing = null;
+                    for (DocumentSnapshot documentSnapshot : queryDocumentSnapshots.getDocuments()) {
+                        PrivateChat chat = documentSnapshot.toObject(PrivateChat.class);
+                        if (chat != null && chat.getMembers() != null && chat.getMembers().contains(user.getId())) {
+                            existing = chat;
+                            existing.setPrivate_id(documentSnapshot.getId());
+                            break;
+                        }
+                    }
+                    if (existing != null) {
+                        if (listener != null) {
+                            listener.onReady(existing);
+                        }
+                        return;
+                    }
+                    createNewChat(user, listener);
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "openOrCreatePrivateChat", e);
+                    if (listener != null) {
+                        listener.onFailure(e);
+                    }
+                });
+    }
+
+    private void createNewChat(User user, OnPrivateChatReadyListener listener) {
+        if (mAuth.getUid() == null) {
+            return;
+        }
+
+        PrivateChat privateChat = new PrivateChat();
+
+        ArrayList<String> members = new ArrayList<>();
+        members.add(user.getId());
+        members.add(mAuth.getUid());
+
+        HashMap<String, Boolean> chatMembers = new HashMap<>();
+        chatMembers.put(user.getId(), true);
+        chatMembers.put(mAuth.getUid(), true);
+
+        privateChat.setChatMembers(chatMembers);
+
+        User myUser = Hawk.get("User");
+        privateChat.setSender(myUser);
+        privateChat.setReceiver(user);
+        privateChat.setAccepted(false);
+        privateChat.setMembers(members);
+        privateChat.setLastMessage("New Message request");
+
+        db.collection("privateChat")
+                .add(privateChat)
+                .addOnSuccessListener(documentReference -> {
+                    privateChat.setPrivate_id(documentReference.getId());
+                    fetchAllChat();
+                    if (listener != null) {
+                        listener.onReady(privateChat);
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    Log.e(TAG, "createNewChat", e);
+                    if (listener != null) {
+                        listener.onFailure(e);
+                    }
+                });
     }
 
 
@@ -260,7 +292,20 @@ public class UserDataViewModel extends ViewModel {
                         for (DocumentSnapshot documentSnapshot:queryDocumentSnapshots.getDocuments()){
 
                             PrivateChat user= documentSnapshot.toObject(PrivateChat.class);
-                            user.setPrivate_id(documentSnapshot.getId());  // setting the users id from document.
+                            if (user == null) {
+                                continue;
+                            }
+                            user.setPrivate_id(documentSnapshot.getId());
+                            if (user.getMembers() != null && mAuth.getUid() != null) {
+                                String partnerId = user.getMembers().get(0).equals(mAuth.getUid())
+                                        ? user.getMembers().get(1) : user.getMembers().get(0);
+                                if (user.getSender() != null) {
+                                    user.getSender().setId(mAuth.getUid());
+                                }
+                                if (user.getReceiver() != null) {
+                                    user.getReceiver().setId(partnerId);
+                                }
+                            }
                             users.add(user);
                         }
 

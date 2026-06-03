@@ -104,7 +104,12 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ChatViewHolder
 
             message=chatMessage;
 
-            textView.setText(chatMessage.getMessage());
+            if (chatMessage.getMessage() != null && !chatMessage.getMessage().isEmpty()) {
+                textView.setText(chatMessage.getMessage());
+                textView.setVisibility(View.VISIBLE);
+            } else {
+                textView.setVisibility(View.GONE);
+            }
 
 
             Calendar calendar = Calendar.getInstance();
@@ -130,7 +135,7 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ChatViewHolder
 
 
 
-            if (chatMessage.getSenderId().equals(userID)){
+            if (chatMessage.getSenderId() != null && chatMessage.getSenderId().equals(userID)){
 
 
                 LinearLayout.LayoutParams layoutParams = (LinearLayout.LayoutParams) textView.getLayoutParams();
